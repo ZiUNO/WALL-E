@@ -6,8 +6,8 @@
 """
 
 import os
-import numpy as np
 
+import numpy as np
 import tensorflow as tf
 
 
@@ -48,7 +48,7 @@ def __read_data(data_dir, type):
         raise ValueError('wrong type')
     image_dir_name = data_dir + os.sep + type
     attribute_per_class_filename = data_dir + os.sep + 'attributes_per_class.txt'
-    train_filename = data_dir + os.sep + 'train.txt'
+    dataset_filename = data_dir + os.sep + type + '.txt'
     label_list_filename = data_dir + os.sep + 'label_list.txt'
     with open(attribute_per_class_filename, 'r') as f:
         attribute_per_class = f.readlines()
@@ -59,7 +59,7 @@ def __read_data(data_dir, type):
     label_list = [label.strip().split('\t') for label in label_list]
     label_list = [label[0] for label in label_list]  # label_list ZJL格式
     label_list = sorted(label_list)
-    with open(train_filename, 'r') as f:
+    with open(dataset_filename, 'r') as f:
         train = f.readlines()
     train = [(train[index].strip().split('\t')) for index in range(len(train))]
     train = sorted(train, key=(lambda x: x[0]))
@@ -77,7 +77,7 @@ def __read_data(data_dir, type):
     return image_names, attribute, label
 
 
-def __map_fn(image, attribute, label):
+def __parse(image, attribute, label):
     """
     tf.data.Dataset.map函数专用
     :param image: 图片名集合（tensor）
@@ -91,44 +91,19 @@ def __map_fn(image, attribute, label):
     return image_resized, attribute, label
 
 
-def __read_images(images_names, attribute, label):
+def get_iterator(data_dir, type, batch_size):
     """
-    读取图片以及相应的属性集和标签集
-    :param images_names: 图片名集合
-    :param attribute: 属性集
-    :param label: 标签集
-    :return: 数据集
+    Get the iterator of the dataset
+    :param data_dir: the dir of the dataset
+    :param type: 'train' or 'test'
+    :param batch_size: the size of each batch
+    :return:
     """
-    dataset = tf.data.Dataset.from_tensor_slices((images_names, attribute, label))
-    dataset = dataset.map(__map_fn)
-    return dataset
-
-
-def train_inputs(data_dir, batch_size):
-    """
-    训练数据输入
-    :param data_dir:数据集路径（内含list等）
-    :param batch_size: 每批数据大小
-    :return: image_train, attribute_train, label_train
-    """
-    image_names, attribute, label = __read_data(data_dir, type='train')
+    image_names, attribute, label = __read_data(data_dir, type=type)
     image_names = [os.path.join(tmp) for tmp in image_names]
-    read_input = __read_images(image_names, attribute, label)
-    read_input.batch(batch_size=batch_size)
-    read_input.shuffle(buffer_size=1000)
+    read_input_raw = tf.data.Dataset.from_tensor_slices((image_names, attribute, label))
+    read_input = read_input_raw.map(__parse)
+    read_input = read_input.repeat()
+    read_input = read_input.batch(batch_size=batch_size)
     iterator = read_input.make_initializable_iterator()
-    return iterator.get_next()
-
-def test_inputs(data_dir):
-    image_names, attribute, label = __read_data(data_dir, 'test')
-    image_names = [os.path.join(tmp) for tmp in image_names]
-    read_input = __read_images(image_names, attribute, label)
-    read_input.shuffle(buffer_size=500)
-    iterator  = read_input.make_initializable_iterator()
-    return iterator.get_next()
-
-batch_size = 128
-image_train, attribute_train, label_train = train_inputs(r'G:\AI\zero\DatasetA_train_20180813\DatasetA_train_20180813',
-                                                         batch_size=batch_size)
-print(image_train, attribute_train, label_train)
-input("success")
+    return iterator
